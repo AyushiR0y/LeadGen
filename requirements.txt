@@ -1,6 +1,7 @@
 # India Demographic Data System - Requirements
 # Python 3.8+
 streamlit
+python-dotenv
 plotly>=5.0.0
 
 # Core dependencies
