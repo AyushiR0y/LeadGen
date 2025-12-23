@@ -7,6 +7,7 @@ import plotly.graph_objects as go
 import plotly.express as px
 from plotly.subplots import make_subplots
 from dotenv import load_dotenv
+from event_scraper_playwright import get_area_events
 
 # Page config
 st.set_page_config(
@@ -1883,6 +1884,42 @@ if search_button and pincode:
                                     st.download_button(f"📥 Export {name}", csv, f"{name.lower()}_{pincode}.csv", "text/csv")
                                 else:
                                     st.markdown(f'<div class="info-box">No {name.lower()} found in this area</div>', unsafe_allow_html=True)
+
+                # Events Section
+                st.markdown('<div class="section-header">🎉 Upcoming Events & Festivals</div>', unsafe_allow_html=True)
+                
+                # Cache wrapper
+                @st.cache_data(ttl=3600)
+                def cached_events(loc):
+                    return get_area_events(loc)
+                
+                with st.spinner("Finding events..."):
+                    # Use district or city or state for broader search
+                    search_loc = geo.get('city') or geo.get('district') or geo.get('state') or ""
+                    if not search_loc:
+                        search_loc = "India"
+                    
+                    events = cached_events(search_loc)
+                    
+                if events:
+                    # Show top 5 events
+                    for event in events[:5]:
+                        with st.container():
+                            e_col1, e_col2 = st.columns([1, 3])
+                            with e_col1:
+                                if event.get('image'):
+                                    st.image(event['image'], use_container_width=True)
+                                else:
+                                    st.markdown("🖼️ No Image")
+                            with e_col2:
+                                st.subheader(event.get('name', 'Event'))
+                                st.caption(f"📅 {event.get('date')} | 📍 {event.get('location')}")
+                                st.write(event.get('description', ''))
+                                if event.get('url'):
+                                    st.markdown(f"[Read More]({event['url']})")
+                            st.divider()
+                else:
+                    st.info(f"No events found for {search_loc}")
 
 st.markdown("<br><br>", unsafe_allow_html=True)
 st.markdown('<div style="text-align: center; color: #9ca3af; padding: 1.5rem; font-size: 0.85rem; border-top: 1px solid #e5e7eb;">Bajaj Life LeadGen • Source: https://censusindia.gov.in/ </div>', unsafe_allow_html=True)
