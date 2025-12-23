@@ -33,6 +33,7 @@ matplotlib>=3.4.0
 # Web scraping (if extending to more sources)
 # beautifulsoup4>=4.10.0
 # lxml>=4.6.0
+playwright>=1.30.0
 
 # Database storage (optional)
 # sqlalchemy>=1.4.0
