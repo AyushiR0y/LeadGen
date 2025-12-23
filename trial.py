@@ -1863,23 +1863,7 @@ if search_button and pincode:
                             colleges = mappls_nearby(lat, lng, keyword="college")
                             medical = mappls_nearby(lat, lng, keyword="hospital")
                         
-                        # Summary
-                        col1, col2, col3, col4, col5, col6 = st.columns(6)
                         
-                        with col1:
-                            st.markdown(f'<div class="metric-box"><div class="metric-number">{len(industries)}</div><div class="metric-text">Industries</div></div>', unsafe_allow_html=True)
-                        with col2:
-                            st.markdown(f'<div class="metric-box"><div class="metric-number">{len(insurance)}</div><div class="metric-text">Insurance</div></div>', unsafe_allow_html=True)
-                        with col3:
-                            st.markdown(f'<div class="metric-box"><div class="metric-number">{len(clubs)}</div><div class="metric-text">Clubs</div></div>', unsafe_allow_html=True)
-                        with col4:
-                            st.markdown(f'<div class="metric-box"><div class="metric-number">{len(banks)}</div><div class="metric-text">Banks</div></div>', unsafe_allow_html=True)
-                        with col5:
-                            st.markdown(f'<div class="metric-box"><div class="metric-number">{len(colleges)}</div><div class="metric-text">Colleges</div></div>', unsafe_allow_html=True)
-                        with col6:
-                            st.markdown(f'<div class="metric-box"><div class="metric-number">{len(medical)}</div><div class="metric-text">Medical</div></div>', unsafe_allow_html=True)
-                        
-                        st.markdown("<br>", unsafe_allow_html=True)
                         
                         # Tabs
                         tabs = st.tabs(["🏢 Industries", "🛡️ Insurance", "🤝 Clubs", "🏦 Banks", "🎓 Colleges", "🏥 Medical"])
@@ -1902,3 +1886,4 @@ if search_button and pincode:
 
 st.markdown("<br><br>", unsafe_allow_html=True)
 st.markdown('<div style="text-align: center; color: #9ca3af; padding: 1.5rem; font-size: 0.85rem; border-top: 1px solid #e5e7eb;">Bajaj Life LeadGen • Source: https://censusindia.gov.in/ </div>', unsafe_allow_html=True)
+
