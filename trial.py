@@ -7,7 +7,8 @@ import plotly.graph_objects as go
 import plotly.express as px
 from plotly.subplots import make_subplots
 from dotenv import load_dotenv
-
+import json
+from openai import AzureOpenAI
 # Page config
 st.set_page_config(
     page_title="Lead Intelligence Dashboard",
@@ -1985,5 +1986,6 @@ if search_button and pincode:
 
 st.markdown("<br><br>", unsafe_allow_html=True)
 st.markdown('<div style="text-align: center; color: #9ca3af; padding: 1.5rem; font-size: 0.85rem; border-top: 1px solid #e5e7eb;">Bajaj Life LeadGen • Source: https://censusindia.gov.in/ </div>', unsafe_allow_html=True)
+
 
 
