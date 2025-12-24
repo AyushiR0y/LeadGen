@@ -21,6 +21,12 @@ load_dotenv()
 MAPPLS_CLIENT_ID = os.getenv("MAPPLS_CLIENT_ID")
 MAPPLS_CLIENT_SECRET = os.getenv("MAPPLS_CLIENT_SECRET")
 
+# Azure OpenAI Configuration
+AZURE_OPENAI_API_KEY = os.getenv("AZURE_OPENAI_API_KEY")
+AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT")
+AZURE_OPENAI_API_VERSION = os.getenv("AZURE_OPENAI_API_VERSION", "2024-02-15-preview")
+AZURE_OPENAI_DEPLOYMENT_NAME = os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME")
+
 # Custom CSS (unchanged)
 st.markdown("""
     <style>
@@ -1986,6 +1992,7 @@ if search_button and pincode:
 
 st.markdown("<br><br>", unsafe_allow_html=True)
 st.markdown('<div style="text-align: center; color: #9ca3af; padding: 1.5rem; font-size: 0.85rem; border-top: 1px solid #e5e7eb;">Bajaj Life LeadGen • Source: https://censusindia.gov.in/ </div>', unsafe_allow_html=True)
+
 
 
 
