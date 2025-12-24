@@ -1395,7 +1395,64 @@ def occupation_section(state_name):
             st.markdown('<div class="warning-box">⚠️ Unable to create visualization. Please check your filter selections.</div>', unsafe_allow_html=True)
     else:
         st.markdown(f'<div class="info-box">No data available for the selected filters. Available records: {len(filtered_data) if filtered_data is not None else 0}</div>', unsafe_allow_html=True)
+@st.cache_data(ttl=86400)
+def get_upcoming_events(district: str, state: str):
+    try:
+        client = AzureOpenAI(
+            api_key=AZURE_OPENAI_API_KEY,
+            api_version=AZURE_OPENAI_API_VERSION,
+            azure_endpoint=AZURE_OPENAI_ENDPOINT
+        )
         
+        prompt = f"""You are a helpful assistant that provides information about upcoming events in India by searching recent web results.
+Please provide a list of upcoming cultural events, festivals, big concerts, and parties in {district} district, {state} state, India.
+For each event, provide in a chronological list:
+1. Name of the event/festival
+2. Date (or expected date range)
+3. Address/Location
+4. Short description (2-3 sentences)
+5. Official website or social media (if available)
+Please return the response as a JSON array with the following structure:
+[
+  {{
+    "name": "Event Name",
+    "date": "Date range",
+    "address": "Specific location or venue",
+    "description": "Brief description of the event",
+    "website": "URL or 'Not available'"
+  }}
+]
+Focus on events within the next 3-6 months, on or after December 2025. Ensure that the link is correct otherwise don't provide. If you don't have specific information for this district, provide general information about major festivals and cultural events typically celebrated in this region. Return at least 7-10 events.
+"""
+ 
+        response = client.chat.completions.create(
+            model=AZURE_OPENAI_DEPLOYMENT_NAME,
+            messages=[
+                {"role": "system", "content": "You are a helpful assistant that provides accurate information about events in India. Always return valid JSON."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.7,
+            max_tokens=2000
+        )
+        
+        content = response.choices[0].message.content.strip()
+        
+        if content.startswith("```json"):
+            content = content.replace("```json", "").replace("```", "").strip()
+        elif content.startswith("```"):
+            content = content.replace("```", "").strip()
+        
+        events = json.loads(content)
+        
+        if not isinstance(events, list):
+            return []
+        
+        return events
+    
+    except Exception as e:
+        st.error(f"Error fetching events: {str(e)}")
+        return []
+         
 def create_vibrant_chart(chart_type, data, height=280, bar_width=0.6, align_end=False, long_text=False):
     """Create vibrant, professional charts with varied types"""
     colors = {
@@ -1846,7 +1903,50 @@ if search_button and pincode:
                             occupation_section(state_name)
 
                         # end of education/occupation/industrial processing section
-
+                # Upcoming Events Section
+                st.markdown('<div class="section-header">🎉 Upcoming Events in the Area</div>', unsafe_allow_html=True)
+                
+                with st.spinner(f"Fetching upcoming events for {district_name}, {state_name}..."):
+                    events = get_upcoming_events(district_name, state_name)
+                
+                if events:
+                    st.markdown(f'<div class="info-box">📅 Found {len(events)} upcoming events in {district_name} district</div>', unsafe_allow_html=True)
+                    
+                    for idx, event in enumerate(events, 1):
+                        with st.expander(f" {event.get('name', 'Unnamed Event')} - {event.get('date', 'Date TBD')}"):
+                            col1, col2 = st.columns([2, 1])
+                            
+                            with col1:
+                                st.markdown(f"**📍 Location:** {event.get('address', 'Not specified')}")
+                                st.markdown(f"**📝 Description:**")
+                                st.write(event.get('description', 'No description available'))
+                                
+                                if event.get('website') and event['website'].lower() != 'not available':
+                                    st.markdown(f"**🌐 Website:** [{event['website']}]({event['website']})")
+                                
+                                if event.get('sources') and event['sources'].lower() != 'not available':
+                                    st.markdown(f"**📚 Source:** {event['sources']}")
+                            
+                            with col2:
+                                st.markdown(f"**📅 Date:**")
+                                st.info(event.get('date', 'TBD'))
+                                
+                                
+                    
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    events_df = pd.DataFrame(events)
+                    csv_data = events_df.to_csv(index=False).encode('utf-8')
+                    st.download_button(
+                        label="📥 Export Events to CSV",
+                        data=csv_data,
+                        file_name=f"upcoming_events_{district_name}_{pincode}.csv",
+                        mime="text/csv",
+                        key="events_export"
+                    )
+                else:
+                    st.markdown('<div class="warning-box">⚠️ Unable to fetch upcoming events at this time. Please try again later.</div>', unsafe_allow_html=True)
+ 
+ 
                 # Business Leads
                 st.markdown('<div class="section-header">🎯 Business Leads (10km radius)</div>', unsafe_allow_html=True)
                 
@@ -1885,3 +1985,4 @@ if search_button and pincode:
 
 st.markdown("<br><br>", unsafe_allow_html=True)
 st.markdown('<div style="text-align: center; color: #9ca3af; padding: 1.5rem; font-size: 0.85rem; border-top: 1px solid #e5e7eb;">Bajaj Life LeadGen • Source: https://censusindia.gov.in/ </div>', unsafe_allow_html=True)
+
