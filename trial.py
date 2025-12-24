@@ -9,6 +9,7 @@ from plotly.subplots import make_subplots
 from dotenv import load_dotenv
 import json
 from openai import AzureOpenAI
+import os
 from datetime import datetime
 
 # Page config
@@ -336,6 +337,68 @@ st.markdown("""
         
         .filter-header svg {
             margin-right: 0.5rem;
+        }
+        
+        .event-card {
+            background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+            border-radius: 12px;
+            padding: 1rem;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+            transition: all 0.3s ease;
+            cursor: pointer;
+            border: 1px solid #f1f5f9;
+            height: 140px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+        
+        .event-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 16px rgba(0, 94, 172, 0.15);
+            border-color: #005eac;
+        }
+        
+        .event-card-title {
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: #005eac;
+            margin-bottom: 0.5rem;
+            line-height: 1.3;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+        
+        .event-card-date {
+            font-size: 0.75rem;
+            color: #6b7280;
+            font-weight: 500;
+            background: #e0f2fe;
+            padding: 0.25rem 0.5rem;
+            border-radius: 6px;
+            display: inline-block;
+        }
+        
+        .event-card-location {
+            font-size: 0.7rem;
+            color: #9ca3af;
+            margin-top: 0.25rem;
+            display: -webkit-box;
+            -webkit-line-clamp: 1;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+        [data-testid="stExpander"] summary {
+            font-size: 0.7rem !important;
+            padding: 0.3rem 0.5rem !important;
+            min-height: unset !important;
+        }
+        
+        [data-testid="stExpander"] summary p {
+            font-size: 0.7rem !important;
+            margin: 0 !important;
         }
     </style>
 """, unsafe_allow_html=True)
@@ -1919,43 +1982,72 @@ if search_button and pincode:
                     events = get_upcoming_events(district_name, state_name)
                 
                 if events:
-                    st.markdown(f'<div class="info-box">📅 Found {len(events)} upcoming events in {district_name} district</div>', unsafe_allow_html=True)
+                    # Sort events chronologically
+                    def parse_date(date_str):
+                        """Simple date parser for sorting"""
+                        try:
+                            # Try various date formats
+                            for fmt in ["%B %d, %Y", "%B %Y", "%d %B %Y", "%Y-%m-%d"]:
+                                try:
+                                    return datetime.strptime(date_str.split('-')[0].strip(), fmt)
+                                except:
+                                    continue
+                            return datetime(2099, 12, 31)  # Put unparseable dates at end
+                        except:
+                            return datetime(2099, 12, 31)
                     
-                    for idx, event in enumerate(events, 1):
-                        with st.expander(f" {event.get('name', 'Unnamed Event')} - {event.get('date', 'Date TBD')}"):
-                            col1, col2 = st.columns([2, 1])
-                            
-                            with col1:
-                                st.markdown(f"**📍 Location:** {event.get('address', 'Not specified')}")
-                                st.markdown(f"**📝 Description:**")
-                                st.write(event.get('description', 'No description available'))
-                                
-                                if event.get('website') and event['website'].lower() != 'not available':
-                                    st.markdown(f"**🌐 Website:** [{event['website']}]({event['website']})")
-                                
-                                if event.get('sources') and event['sources'].lower() != 'not available':
-                                    st.markdown(f"**📚 Source:** {event['sources']}")
-                            
-                            with col2:
-                                st.markdown(f"**📅 Date:**")
-                                st.info(event.get('date', 'TBD'))
-                                
-                                
+                    events_sorted = sorted(events, key=lambda x: parse_date(x.get('date', '')))
+                    
+                    st.markdown(f'<div class="info-box">📅 Found {len(events_sorted)} upcoming events in {district_name} district</div>', unsafe_allow_html=True)
+                    
+                    # Display events in cards - 5 per row
+                    num_events = len(events_sorted)
+                    num_rows = (num_events + 4) // 5  # Ceiling division
+                    
+                    for row in range(num_rows):
+                        cols = st.columns(5)
+                        for col_idx in range(5):
+                            event_idx = row * 5 + col_idx
+                            if event_idx < num_events:
+                                event = events_sorted[event_idx]
+                                with cols[col_idx]:
+                                    with st.container():
+                                        st.markdown(f'''
+                                        <div class="event-card">
+                                            <div>
+                                                <div class="event-card-title">{event.get('name', 'Unnamed Event')}</div>
+                                                <div class="event-card-date">📅 {event.get('date', 'TBD')}</div>
+                                            </div>
+                                            <div class="event-card-location">📍 {event.get('address', 'Location TBD')}</div>
+                                        </div>
+                                        ''', unsafe_allow_html=True)
+                                        
+                                        # Expandable details
+                                        with st.expander("View Details", expanded=False):
+                                            st.markdown(f"**📝 Description:**")
+                                            st.write(event.get('description', 'No description available'))
+                                            
+                                            st.markdown(f"**📍 Full Address:**")
+                                            st.info(event.get('address', 'Not specified'))
+                                            
+                                            if event.get('website') and event['website'].lower() != 'not available':
+                                                st.markdown(f"**🌐 Website:** [{event['website']}]({event['website']})")
                     
                     st.markdown("<br>", unsafe_allow_html=True)
-                    events_df = pd.DataFrame(events)
+                    
+                    # Export button
+                    events_df = pd.DataFrame(events_sorted)
                     csv_data = events_df.to_csv(index=False).encode('utf-8')
                     st.download_button(
                         label="📥 Export Events to CSV",
                         data=csv_data,
                         file_name=f"upcoming_events_{district_name}_{pincode}.csv",
                         mime="text/csv",
-                        key="events_export"
+                        key="events_export",
+                        use_container_width=False
                     )
                 else:
                     st.markdown('<div class="warning-box">⚠️ Unable to fetch upcoming events at this time. Please try again later.</div>', unsafe_allow_html=True)
- 
- 
                 # Business Leads
                 st.markdown('<div class="section-header">🎯 Business Leads (10km radius)</div>', unsafe_allow_html=True)
                 
@@ -1994,8 +2086,5 @@ if search_button and pincode:
 
 st.markdown("<br><br>", unsafe_allow_html=True)
 st.markdown('<div style="text-align: center; color: #9ca3af; padding: 1.5rem; font-size: 0.85rem; border-top: 1px solid #e5e7eb;">Bajaj Life LeadGen • Source: https://censusindia.gov.in/ </div>', unsafe_allow_html=True)
-
-
-
 
 
