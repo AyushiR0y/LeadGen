@@ -908,7 +908,7 @@ def industrial_section(state_name):
         st.markdown('<div class="warning-box">⚠️ Industrial data not available</div>', unsafe_allow_html=True)
         return
     
-    st.markdown(f'<div class="section-header">🏭 Industrial Category Analysis</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="section-header">🏭 Industrial Category Analysis (State Level) </div>', unsafe_allow_html=True)
     
     # Add information about HHI vs Non-HHI
     st.markdown('''
@@ -1273,7 +1273,7 @@ def occupation_section(state_name):
         st.markdown('<div class="warning-box">⚠️ Occupation data not available</div>', unsafe_allow_html=True)
         return
     
-    st.markdown(f'<div class="section-header">👥 Occupation Classification Analysis</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="section-header">👥 Occupation Classification Analysis (State Level) </div>', unsafe_allow_html=True)
     
     # Get filter options
     area_types = get_occupation_filter_options(state_name)
@@ -1858,7 +1858,7 @@ if search_button and pincode:
                                 # Display funnel and literacy side-by-side
                                 col_funnel, col_lit = st.columns([1, 1])
                                 with col_funnel:
-                                    st.markdown('<div class="simple-header">Education Funnel</div>', unsafe_allow_html=True)
+                                    st.markdown('<div class="simple-header">Education Funnel (State Level) </div>', unsafe_allow_html=True)
                                     fig_funnel = go.Figure(go.Funnel(
                                         x=funnel_df['Count'],
                                         y=funnel_df['Education Level'],
@@ -1985,4 +1985,5 @@ if search_button and pincode:
 
 st.markdown("<br><br>", unsafe_allow_html=True)
 st.markdown('<div style="text-align: center; color: #9ca3af; padding: 1.5rem; font-size: 0.85rem; border-top: 1px solid #e5e7eb;">Bajaj Life LeadGen • Source: https://censusindia.gov.in/ </div>', unsafe_allow_html=True)
+
 
