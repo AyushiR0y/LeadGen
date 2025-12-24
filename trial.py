@@ -7,9 +7,7 @@ import plotly.graph_objects as go
 import plotly.express as px
 from plotly.subplots import make_subplots
 from dotenv import load_dotenv
-import json
-from openai import AzureOpenAI
- 
+
 # Page config
 st.set_page_config(
     page_title="Lead Intelligence Dashboard",
@@ -17,17 +15,11 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"  # Changed to expanded to accommodate filters
 )
- 
+
 load_dotenv()
 MAPPLS_CLIENT_ID = os.getenv("MAPPLS_CLIENT_ID")
 MAPPLS_CLIENT_SECRET = os.getenv("MAPPLS_CLIENT_SECRET")
- 
-# Azure OpenAI Configuration
-AZURE_OPENAI_API_KEY = os.getenv("AZURE_OPENAI_API_KEY")
-AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT", "https://balic-gpt-contentgenerationnew.openai.azure.com")
-AZURE_OPENAI_DEPLOYMENT_NAME = os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME", "gpt-4o")
-AZURE_OPENAI_API_VERSION = os.getenv("AZURE_OPENAI_API_VERSION", "2024-02-01")
- 
+
 # Custom CSS (unchanged)
 st.markdown("""
     <style>
@@ -338,7 +330,7 @@ st.markdown("""
         }
     </style>
 """, unsafe_allow_html=True)
- 
+
 # Load data functions
 @st.cache_data
 def load_pincode_data():
@@ -350,7 +342,7 @@ def load_pincode_data():
         return df
     except:
         return None
- 
+
 @st.cache_data
 def load_pca_data():
     try:
@@ -369,7 +361,7 @@ def load_pca_data():
                 return df
             except:
                 return None
- 
+
 @st.cache_data
 def load_census_data():
     """Load all census data from new Excel file with multiple sheets"""
@@ -393,23 +385,25 @@ def load_census_data():
     except Exception as e:
         st.error(f"Error loading census data: {str(e)}")
         return None, None, None
- 
+
 pincode_df = load_pincode_data()
 pca_df = load_pca_data()
 education_df, occupation_df, industrial_df = load_census_data()
- 
+
 _mappls_token = None
 _mappls_token_expiry = 0
- 
+
 def get_mappls_token(force_refresh=False):
     global _mappls_token, _mappls_token_expiry
     if not force_refresh and _mappls_token and time.time() < _mappls_token_expiry:
         return _mappls_token
+    if not MAPPLS_CLIENT_ID or not MAPPLS_CLIENT_SECRET:
         return None
     token_url = "https://outpost.mappls.com/api/security/oauth/token"
     params = {
         "grant_type": "client_credentials",
         "client_id": MAPPLS_CLIENT_ID,
+        "client_secret": MAPPLS_CLIENT_SECRET,
     }
     try:
         r = requests.post(token_url, params=params, timeout=10)
@@ -425,7 +419,7 @@ def get_mappls_token(force_refresh=False):
         return _mappls_token
     except:
         return None
- 
+
 def lookup_pincode_in_csv(pincode: str):
     if pincode_df is None:
         return None
@@ -446,7 +440,7 @@ def lookup_pincode_in_csv(pincode: str):
         "eloc": None,
         "source": "Local Database"
     }
- 
+
 def mappls_geocode(address_text: str):
     token = get_mappls_token()
     if not token:
@@ -483,73 +477,14 @@ def mappls_geocode(address_text: str):
         "lng": lng,
         "source": "Mappls API"
     }
- 
+
 def get_location_info(pincode: str):
     info = lookup_pincode_in_csv(pincode)
     if info and info.get('lat') and info.get('lng'):
         return info
     info = mappls_geocode(f"{pincode}, India")
     return info
- 
-@st.cache_data(ttl=86400)
-def get_upcoming_events(district: str, state: str):
-    try:
-        client = AzureOpenAI(
-            api_key=AZURE_OPENAI_API_KEY,
-            api_version=AZURE_OPENAI_API_VERSION,
-            azure_endpoint=AZURE_OPENAI_ENDPOINT
-        )
-        
-        prompt = f"""You are a helpful assistant that provides information about upcoming events in India by searching recent web results.
-Please provide a list of upcoming cultural events, festivals, big concerts, and parties in {district} district, {state} state, India.
-For each event, provide in a chronological list:
-1. Name of the event/festival
-2. Date (or expected date range)
-3. Address/Location
-4. Short description (2-3 sentences)
-5. Official website or social media (if available)
-Please return the response as a JSON array with the following structure:
-[
-  {{
-    "name": "Event Name",
-    "date": "Date range",
-    "address": "Specific location or venue",
-    "description": "Brief description of the event",
-    "website": "URL or 'Not available'"
-  }}
-]
-Focus on events within the next 3-6 months, on or after December 2025. Ensure that the link is correct otherwise don't provide. If you don't have specific information for this district, provide general information about major festivals and cultural events typically celebrated in this region. Return at least 7-10 events.
-"""
- 
-        response = client.chat.completions.create(
-            model=AZURE_OPENAI_DEPLOYMENT_NAME,
-            messages=[
-                {"role": "system", "content": "You are a helpful assistant that provides accurate information about events in India. Always return valid JSON."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.7,
-            max_tokens=2000
-        )
-        
-        content = response.choices[0].message.content.strip()
-        
-        if content.startswith("```json"):
-            content = content.replace("```json", "").replace("```", "").strip()
-        elif content.startswith("```"):
-            content = content.replace("```", "").strip()
-        
-        events = json.loads(content)
-        
-        if not isinstance(events, list):
-            return []
-        
-        return events
-    
-    except Exception as e:
-        st.error(f"Error fetching events: {str(e)}")
-        return []
- 
- 
+
 def mappls_nearby(lat: float, lng: float, keyword: str, radius: int = 10000):
     if lat is None or lng is None:
         return []
@@ -601,7 +536,7 @@ def mappls_nearby(lat: float, lng: float, keyword: str, radius: int = 10000):
             break
         page += 1
     return all_rows
- 
+
 def get_demographics_data(district_name, state_name):
     if pca_df is None:
         return None, "No Data"
@@ -654,7 +589,7 @@ def get_demographics_data(district_name, state_name):
     if not india_data.empty:
         return india_data.iloc[0], "India (National Average)"
     return None, "No Data"
- 
+
 def get_education_data(state_name):
     """Get education level data for state from new Excel file"""
     if education_df is None:
@@ -682,7 +617,7 @@ def get_education_data(state_name):
         return india_data.iloc[0]
     
     return None
- 
+
 def get_occupation_data(state_name):
     """Get occupation classification data for state from new Excel file"""
     if occupation_df is None:
@@ -710,7 +645,7 @@ def get_occupation_data(state_name):
         return india_data
     
     return None
- 
+
 def get_industrial_data(state_name):
     """Get industrial category data for state from new Excel file"""
     if industrial_df is None:
@@ -738,7 +673,7 @@ def get_industrial_data(state_name):
         return india_data.iloc[0]
     
     return None
- 
+
 def get_filtered_industrial_data(state_name, religion=None, age_group=None, gender=None, level=None, tru=None):
     """Get filtered industrial category data based on multiple dimensions"""
     if industrial_df is None:
@@ -768,7 +703,7 @@ def get_filtered_industrial_data(state_name, religion=None, age_group=None, gend
         filtered_data = filtered_data[filtered_data['Total/Rural/Urban | Total/Rural/Urban'] == tru]
     
     return filtered_data
- 
+
 def get_industrial_filter_options(state_name):
     """Get available filter options for industrial data"""
     if industrial_df is None:
@@ -831,7 +766,7 @@ def get_education_funnel_data(state_name):
         (['Non-technical diploma or certificate not equal to degree | Persons', 'Technical diploma or certificate not equal to degree | Persons'], 'Diploma'),
         (['Graduate & above | Persons', 'Post Graduate | Persons'], 'Graduate & above')
     ]
- 
+
     try:
         for col_names, label in education_funnel_levels:
             total_val = 0
@@ -846,7 +781,7 @@ def get_education_funnel_data(state_name):
     if funnel_data:
         return pd.DataFrame(funnel_data)
     return None
- 
+
 def create_industrial_breakdown(filtered_data, gender=None):
     """Create a breakdown of industrial categories from filtered data"""
     if filtered_data is None or filtered_data.empty:
@@ -867,7 +802,7 @@ def create_industrial_breakdown(filtered_data, gender=None):
         # Skip metadata columns (case-insensitive)
         if any(x.lower() in col_lower for x in ['Area Name', 'Religon', 'Age group', 'Level', 'Total/Rural/Urban']):
             continue
- 
+
         # Check gender filter
         if gender == 'Male':
             if ('males' not in col_lower) and ('male' not in col_lower):
@@ -879,7 +814,7 @@ def create_industrial_breakdown(filtered_data, gender=None):
             if 'persons' not in col_lower and 'person' not in col_lower and 'total' not in col_lower:
                 # skip gender-specific columns when showing aggregate 'All'
                 continue
- 
+
         # Classify as HHI or Non-HHI based on column content
         if 'household' in col_lower or 'hhi' in col_lower or '| hhi' in col_lower:
             hhi_cols.append(col)
@@ -965,7 +900,7 @@ def create_industrial_breakdown(filtered_data, gender=None):
         'HHI_Details': hhi_details,
         'Non_HHI_Details': non_hhi_details
     }
- 
+
 @st.fragment
 def industrial_section(state_name):
     """Isolated fragment for industrial category analysis to prevent full page rerun"""
@@ -973,7 +908,7 @@ def industrial_section(state_name):
         st.markdown('<div class="warning-box">⚠️ Industrial data not available</div>', unsafe_allow_html=True)
         return
     
-    st.markdown(f'<div class="section-header">🏭 Industrial Category Analysis (State Level)</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="section-header">🏭 Industrial Category Analysis</div>', unsafe_allow_html=True)
     
     # Add information about HHI vs Non-HHI
     st.markdown('''
@@ -1105,27 +1040,36 @@ def industrial_section(state_name):
                         st.markdown("""
                         **HHI (Household Industry)**  
                         Small, family-run, home or village-based industry work (tailoring, handloom, handicrafts, beedi rolling, pickle/papad units etc.). Usually informal, variable income.
+
                         **Non-HHI (Non Household Industry)**  
                         Workers in factories, registered companies, or formal sector establishments. More stable salaries → better insurance affordability.
+
                         ---
+
                         ### 👥 Main Workers
                         Worked **180+ days/year** → consistent income → strong insurance prospects.
+
                         ---
+
                         ### 🌾 Category Meaning (Non-HHI Focus)
                         **Cultivators (Non-HHI)**  
                         Work in organized / institutional farming setups. Often moderate to high earning potential → term + health insurance suitable.
+
                         **Agricultural Labourers (Non-HHI)**  
                         Work on others’ land for wages. Income less stable → micro-insurance / low premium plans fit better.
+
                         **Plantation / Livestock / Forestry / Fishing etc. (Non-HHI)**  
                         Semi-stable, seasonal but structured sector → health + income protection relevant.
+
                         ---
+
                         ### 🏦 Why This Matters for Insurance Lead-Gen
                         - **Non-HHI Main Workers → strongest leads (stable predictable income)**
                         - **HHI Workers → flexible premium plans**
                         - **Agricultural Labourers → protection-focused policies**
                         - **Cultivators / Plantation / Livestock → high family cover potential**
                         """)
- 
+
                     
                 else:
                     st.markdown('<div class="info-box">No subcategory data available for the selected filters.</div>', unsafe_allow_html=True)
@@ -1149,7 +1093,7 @@ def get_occupation_data_filtered(state_name, gender=None, area_type=None, worker
         filtered_data = filtered_data[filtered_data['Total/Rural/Urban | Total/Rural/Urban'] == area_type]
     
     return filtered_data
- 
+
 def get_occupation_filter_options(state_name):
     """Get available filter options for occupation data"""
     if occupation_df is None:
@@ -1170,7 +1114,7 @@ def get_occupation_filter_options(state_name):
     area_types = ['All'] + area_types
     
     return area_types
- 
+
 def bucket_occupation_categories(nco_name):
     """Bucket NCO names into broader categories"""
     if pd.isna(nco_name):
@@ -1219,7 +1163,7 @@ def bucket_occupation_categories(nco_name):
         return "Unclassified"
     
     return "Other"
- 
+
 def regularize_nco_name(nco_name):
     """Regularize NCO names to make them more readable"""
     if pd.isna(nco_name):
@@ -1261,7 +1205,7 @@ def regularize_nco_name(nco_name):
     }
     
     return replacements.get(nco_name, nco_name)
- 
+
 def create_occupation_visualization(filtered_data, gender, worker_type):
     """Create visualization based on occupation data and filters"""
     if filtered_data is None or filtered_data.empty:
@@ -1321,7 +1265,7 @@ def create_occupation_visualization(filtered_data, gender, worker_type):
     bucket_options = sorted(filtered_data['Occupation Category'].unique())
     
     return bucketed_data, filtered_data[['Regularized NCO', 'Occupation Category', count_col]], count_col
- 
+
 @st.fragment
 def occupation_section(state_name):
     """Isolated fragment for occupation classification analysis to prevent full page rerun"""
@@ -1329,7 +1273,7 @@ def occupation_section(state_name):
         st.markdown('<div class="warning-box">⚠️ Occupation data not available</div>', unsafe_allow_html=True)
         return
     
-    st.markdown(f'<div class="section-header">👥 Occupation Classification Analysis (State Level)</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="section-header">👥 Occupation Classification Analysis</div>', unsafe_allow_html=True)
     
     # Get filter options
     area_types = get_occupation_filter_options(state_name)
@@ -1663,14 +1607,14 @@ def create_vibrant_chart(chart_type, data, height=280, bar_width=0.6, align_end=
     
     return fig
 # ============= UI =============
- 
+
 st.markdown("""
     <div class="main-header">
         <h1>🎯 Lead Intelligence Dashboard</h1>
         <p>Discover business opportunities with demographic insights</p>
     </div>
 """, unsafe_allow_html=True)
- 
+
 # Status
 col1, col2, col3 = st.columns([1, 1, 3])
 with col1:
@@ -1679,7 +1623,7 @@ with col1:
 with col2:
     if pca_df is not None:
         st.markdown('<span class="status-text">✓ Demographics loaded</span>', unsafe_allow_html=True)
- 
+
 # Search
 col1, col2 = st.columns([6, 1])
 with col1:
@@ -1691,7 +1635,7 @@ with col1:
     )
 with col2:
     search_button = st.button("Search", use_container_width=True, type="primary")
- 
+
 if search_button and pincode:
     if len(pincode) != 6 or not pincode.isdigit():
         st.markdown('<div class="warning-box">⚠️ Please enter a valid 6-digit pincode</div>', unsafe_allow_html=True)
@@ -1857,7 +1801,7 @@ if search_button and pincode:
                                 # Display funnel and literacy side-by-side
                                 col_funnel, col_lit = st.columns([1, 1])
                                 with col_funnel:
-                                    st.markdown('<div class="simple-header">Education Funnel (State Level)</div>', unsafe_allow_html=True)
+                                    st.markdown('<div class="simple-header">Education Funnel</div>', unsafe_allow_html=True)
                                     fig_funnel = go.Figure(go.Funnel(
                                         x=funnel_df['Count'],
                                         y=funnel_df['Education Level'],
@@ -1869,7 +1813,7 @@ if search_button and pincode:
                                         textinfo='value+percent initial',
                                         hovertemplate='<b>%{y}</b><br>Count: %{x:,.0f}<extra></extra>'
                                     ))
- 
+
                                     fig_funnel.update_layout(
                                         xaxis_title='Number of Persons',
                                         yaxis_title='Education Level',
@@ -1880,7 +1824,7 @@ if search_button and pincode:
                                         font=dict(size=11)
                                     )
                                     st.plotly_chart(fig_funnel, use_container_width=True, config={'displayModeBar': True})
- 
+
                                 with col_lit:
                                     st.markdown('<div class="simple-header">Literacy Rate by Gender</div>', unsafe_allow_html=True)
                                     male_literacy = (int(demo_data.get('M_LIT', 0)) / male_pop * 100) if male_pop > 0 else 0
@@ -1893,60 +1837,16 @@ if search_button and pincode:
                                         height=360
                                     )
                                     st.plotly_chart(fig_lit, use_container_width=True, config={'displayModeBar': False})
- 
+
                         # Industrial Category with Multi-level Filters
                         if industrial_df is not None:
                             industrial_section(state_name)
                         # Occupation Classification with Multi-level Filters
                         if occupation_df is not None:
                             occupation_section(state_name)
- 
+
                         # end of education/occupation/industrial processing section
- 
-                # Upcoming Events Section
-                st.markdown('<div class="section-header">🎉 Upcoming Events in the Area</div>', unsafe_allow_html=True)
-                
-                with st.spinner(f"Fetching upcoming events for {district_name}, {state_name}..."):
-                    events = get_upcoming_events(district_name, state_name)
-                
-                if events:
-                    st.markdown(f'<div class="info-box">📅 Found {len(events)} upcoming events in {district_name} district</div>', unsafe_allow_html=True)
-                    
-                    for idx, event in enumerate(events, 1):
-                        with st.expander(f" {event.get('name', 'Unnamed Event')} - {event.get('date', 'Date TBD')}"):
-                            col1, col2 = st.columns([2, 1])
-                            
-                            with col1:
-                                st.markdown(f"**📍 Location:** {event.get('address', 'Not specified')}")
-                                st.markdown(f"**📝 Description:**")
-                                st.write(event.get('description', 'No description available'))
-                                
-                                if event.get('website') and event['website'].lower() != 'not available':
-                                    st.markdown(f"**🌐 Website:** [{event['website']}]({event['website']})")
-                                
-                                if event.get('sources') and event['sources'].lower() != 'not available':
-                                    st.markdown(f"**📚 Source:** {event['sources']}")
-                            
-                            with col2:
-                                st.markdown(f"**📅 Date:**")
-                                st.info(event.get('date', 'TBD'))
-                                
-                                
-                    
-                    st.markdown("<br>", unsafe_allow_html=True)
-                    events_df = pd.DataFrame(events)
-                    csv_data = events_df.to_csv(index=False).encode('utf-8')
-                    st.download_button(
-                        label="📥 Export Events to CSV",
-                        data=csv_data,
-                        file_name=f"upcoming_events_{district_name}_{pincode}.csv",
-                        mime="text/csv",
-                        key="events_export"
-                    )
-                else:
-                    st.markdown('<div class="warning-box">⚠️ Unable to fetch upcoming events at this time. Please try again later.</div>', unsafe_allow_html=True)
- 
- 
+
                 # Business Leads
                 st.markdown('<div class="section-header">🎯 Business Leads (10km radius)</div>', unsafe_allow_html=True)
                 
@@ -1963,8 +1863,7 @@ if search_button and pincode:
                             colleges = mappls_nearby(lat, lng, keyword="college")
                             medical = mappls_nearby(lat, lng, keyword="hospital")
                         
-                        
-                        
+                                                
                         # Tabs
                         tabs = st.tabs(["🏢 Industries", "🛡️ Insurance", "🤝 Clubs", "🏦 Banks", "🎓 Colleges", "🏥 Medical"])
                         
@@ -1983,7 +1882,6 @@ if search_button and pincode:
                                     st.download_button(f"📥 Export {name}", csv, f"{name.lower()}_{pincode}.csv", "text/csv")
                                 else:
                                     st.markdown(f'<div class="info-box">No {name.lower()} found in this area</div>', unsafe_allow_html=True)
- 
+
 st.markdown("<br><br>", unsafe_allow_html=True)
 st.markdown('<div style="text-align: center; color: #9ca3af; padding: 1.5rem; font-size: 0.85rem; border-top: 1px solid #e5e7eb;">Bajaj Life LeadGen • Source: https://censusindia.gov.in/ </div>', unsafe_allow_html=True)
- 
