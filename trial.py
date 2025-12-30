@@ -549,14 +549,15 @@ def mappls_geocode(address_text: str):
         "lng": lng,
         "source": "Mappls API"
     }
-
+@st.cache_data(ttl=3600)
 def get_location_info(pincode: str):
     info = lookup_pincode_in_csv(pincode)
     if info and info.get('lat') and info.get('lng'):
         return info
     info = mappls_geocode(f"{pincode}, India")
     return info
-
+    
+@st.cache_data(ttl=3600)
 def mappls_nearby(lat: float, lng: float, keyword: str, radius: int = 10000):
     if lat is None or lng is None:
         return []
@@ -1054,7 +1055,7 @@ def industrial_section(state_name):
                         'values': [breakdown['HHI_Total'], breakdown['Non_HHI_Total']],
                         'colors': ['#93c5fd', '#c4fbdd']
                     },
-                    height=350
+                    height=250
                 )
                 st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
                 
@@ -1105,7 +1106,7 @@ def industrial_section(state_name):
                             'values': values,
                             'colors': ['#ffffc1' if 'HHI' in label else '#ffc9ba' for label in labels]
                         },
-                        height=400
+                        height=350
                     )
                     st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
                     with st.expander("ℹ️ Explanation of HHI, Non-HHI & Worker Categories"):
@@ -1434,7 +1435,7 @@ def occupation_section(state_name):
                         'x': bucket_filtered[count_col],  # Use the actual count column
                         'colors': ['#ffe6e6', '#ffe0e0', '#ffdada', '#ffd4d4', '#ffcece', '#ffc8c8', '#ffc2c2', '#ffbcbc', '#ffb6b6', '#ffb0b0']
                     },
-                    height=320  # Same height as left chart for alignment
+                    height=250  # Same height as left chart for alignment
                 )
                 st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
             
@@ -2086,5 +2087,6 @@ if search_button and pincode:
 
 st.markdown("<br><br>", unsafe_allow_html=True)
 st.markdown('<div style="text-align: center; color: #9ca3af; padding: 1.5rem; font-size: 0.85rem; border-top: 1px solid #e5e7eb;">Bajaj Life LeadGen • Source: https://censusindia.gov.in/ </div>', unsafe_allow_html=True)
+
 
 
