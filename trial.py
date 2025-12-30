@@ -1407,7 +1407,7 @@ def occupation_section(state_name):
                         'x': bucketed_data[count_col],  # Use the actual count column
                         'colors': ['#e6f2ff', '#e6f7ff', '#e6f5ff', '#e6f9ff', '#e6f0ff', '#e6f8ff', '#e6f3ff', '#e6f4ff', '#e6f6ff', '#e6faff']
                     },
-                    height=320  # Consistent height
+                    height=350  # Consistent height
                 )
                 st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
             
@@ -1435,7 +1435,7 @@ def occupation_section(state_name):
                         'x': bucket_filtered[count_col],  # Use the actual count column
                         'colors': ['#ffe6e6', '#ffe0e0', '#ffdada', '#ffd4d4', '#ffcece', '#ffc8c8', '#ffc2c2', '#ffbcbc', '#ffb6b6', '#ffb0b0']
                     },
-                    height=250  # Same height as left chart for alignment
+                    height=200  # Same height as left chart for alignment
                 )
                 st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
             
@@ -2087,6 +2087,7 @@ if search_button and pincode:
 
 st.markdown("<br><br>", unsafe_allow_html=True)
 st.markdown('<div style="text-align: center; color: #9ca3af; padding: 1.5rem; font-size: 0.85rem; border-top: 1px solid #e5e7eb;">Bajaj Life LeadGen • Source: https://censusindia.gov.in/ </div>', unsafe_allow_html=True)
+
 
 
 
