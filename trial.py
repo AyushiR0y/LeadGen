@@ -1608,7 +1608,7 @@ def create_vibrant_chart(chart_type, data, height=280, bar_width=0.6, align_end=
             marker=dict(
                 color=data.get('colors', colors['education'][:len(data['y'])])
             ),
-            textinfo='value+percent initial',
+            textinfo='value',
             textfont=dict(size=11, family='Poppins', color='#4b5563', weight=600),
             hovertemplate='<b>%{y}</b><br>%{x:,}<extra></extra>'
         )])
@@ -1940,7 +1940,7 @@ if search_button and pincode:
                                             line=dict(color='white', width=2)
                                         ),
                                         textposition='inside',
-                                        textinfo='value+percent initial',
+                                        textinfo='value',
                                         hovertemplate='<b>%{y}</b><br>Count: %{x:,.0f}<extra></extra>'
                                     ))
 
@@ -2087,6 +2087,7 @@ if search_button and pincode:
 
 st.markdown("<br><br>", unsafe_allow_html=True)
 st.markdown('<div style="text-align: center; color: #9ca3af; padding: 1.5rem; font-size: 0.85rem; border-top: 1px solid #e5e7eb;">Bajaj Life LeadGen • Source: https://censusindia.gov.in/ </div>', unsafe_allow_html=True)
+
 
 
 
