@@ -30,6 +30,8 @@ AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT")
 AZURE_OPENAI_API_VERSION = os.getenv("AZURE_OPENAI_API_VERSION", "2024-02-15-preview")
 AZURE_OPENAI_DEPLOYMENT_NAME = os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME")
 
+GOOGLE_PLACES_API_KEY = os.getenv("GOOGLE_PLACES_API_KEY") 
+
 # Custom CSS (unchanged)
 st.markdown("""
     <style>
@@ -549,65 +551,113 @@ def mappls_geocode(address_text: str):
         "lng": lng,
         "source": "Mappls API"
     }
-@st.cache_data(ttl=3600)
+
+@st.cache_data(ttl=3600) # Cache results for 1 hour (3600 seconds)
 def get_location_info(pincode: str):
     info = lookup_pincode_in_csv(pincode)
     if info and info.get('lat') and info.get('lng'):
         return info
     info = mappls_geocode(f"{pincode}, India")
     return info
-    
-@st.cache_data(ttl=3600)
-def mappls_nearby(lat: float, lng: float, keyword: str, radius: int = 10000):
-    if lat is None or lng is None:
+import math
+import time
+
+import math
+import time
+
+GOOGLE_PLACES_API_KEY = os.getenv("GOOGLE_PLACES_API_KEY") 
+
+def calculate_distance(lat1, lon1, lat2, lon2):
+    """Calculate distance in KM between two coordinates."""
+    lat1, lon1, lat2, lon2 = map(math.radians, [lat1, lon1, lat2, lon2])
+    dlon = lon2 - lon1 
+    dlat = lat2 - lat1 
+    a = math.sin(dlat/2)**2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon/2)**2
+    c = 2 * math.asin(math.sqrt(a)) 
+    r = 6371
+    return round(c * r, 2)
+
+
+@st.cache_data(ttl=3600)  # Cache results for 1 hour
+def google_places_nearby(lat: float, lng: float, keyword: str, radius: int = 10000):
+    """
+    Fetches nearby places using Google Places API.
+    - Calls API once per Page of results (usually 1-3 calls per category).
+    - Does NOT call API per place (avoids rate limits).
+    - Returns results sorted by Distance.
+    """
+    if not GOOGLE_PLACES_API_KEY:
+        st.error("Google Places API Key missing.")
         return []
-    token = get_mappls_token()
-    if not token:
-        return []
-    url = "https://atlas.mappls.com/api/places/nearby/json"
-    headers = {"Authorization": token}
+
+    url = "https://maps.googleapis.com/maps/api/place/nearbysearch/json"
     all_rows = []
-    page = 1
-    max_pages = 10
-    while page <= max_pages:
+    next_page_token = None
+    
+    # Google allows ~3 pages of results (60 places max usually)
+    max_pages = 3 
+    page_count = 0
+
+    while page_count < max_pages:
         params = {
-            "keywords": keyword,
-            "refLocation": f"{lat},{lng}",
+            "location": f"{lat},{lng}",
             "radius": radius,
-            "page": page,
-            "sortBy": "dist:asc",
+            "keyword": keyword,
+            "key": GOOGLE_PLACES_API_KEY,
         }
+        
+        if next_page_token:
+            params["pagetoken"] = next_page_token
+            time.sleep(2) # Required delay for Google next_page_token
+
         try:
-            r = requests.get(url, headers=headers, params=params, timeout=15)
-            if r.status_code == 401:
-                token = get_mappls_token(force_refresh=True)
-                if not token:
-                    break
-                headers = {"Authorization": token}
-                r = requests.get(url, headers=headers, params=params, timeout=15)
+            r = requests.get(url, params=params, timeout=10)
             r.raise_for_status()
-            content_type = r.headers.get('content-type', '')
-            if 'application/json' not in content_type:
-                break
             data = r.json()
-        except:
+            
+            if data.get("status") != "OK":
+                break
+
+            results = data.get("results", [])
+            
+            for place in results:
+                # Calculate distance manually
+                place_lat = place.get("geometry", {}).get("location", {}).get("lat")
+                place_lng = place.get("geometry", {}).get("location", {}).get("lng")
+                dist_km = calculate_distance(lat, lng, place_lat, place_lng) if place_lat else 9999
+
+                # Formatting Rating with Star
+                rating = place.get("rating")
+                total_reviews = place.get("user_ratings_total", 0)
+                if rating:
+                    rating_str = f"{rating} ★ ({total_reviews})"
+                else:
+                    rating_str = "New (No reviews)"
+
+                
+                all_rows.append({
+                    "Name": place.get("name"),
+                    "Address": place.get("vicinity"),
+                    "Distance (km)": dist_km,
+                    "Rating": rating_str,
+                    "Lat": place_lat, # Needed for map linking later if needed
+                    "Lng": place_lng,
+                })
+
+            next_page_token = data.get("next_page_token")
+            if not next_page_token:
+                break
+                
+            page_count += 1
+
+        except Exception as e:
+            # st.error(f"Error: {e}") # Optional: uncomment for debugging
             break
-        results = data.get("suggestedLocations", [])
-        if not results:
-            break
-        for res in results:
-            distance_m = res.get("distance", 0)
-            distance_km = round(distance_m / 1000, 2) if distance_m else None
-            all_rows.append({
-                "Name": res.get("placeName") or res.get("poi") or "N/A",
-                "Address": res.get("placeAddress") or res.get("address") or "N/A",
-                "Distance": distance_km,
-            })
-        page_info = data.get("pageInfo", {})
-        total_pages = page_info.get("totalPages", 1)
-        if page >= total_pages:
-            break
-        page += 1
+
+    # --- SORTING STEP ---
+    # Sort the entire list by distance before returning
+    all_rows = sorted(all_rows, key=lambda x: x['Distance (km)'])
+    
     return all_rows
 
 def get_demographics_data(district_name, state_name):
@@ -1106,7 +1156,7 @@ def industrial_section(state_name):
                             'values': values,
                             'colors': ['#ffffc1' if 'HHI' in label else '#ffc9ba' for label in labels]
                         },
-                        height=350
+                        height=320
                     )
                     st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
                     with st.expander("ℹ️ Explanation of HHI, Non-HHI & Worker Categories"):
@@ -1407,7 +1457,7 @@ def occupation_section(state_name):
                         'x': bucketed_data[count_col],  # Use the actual count column
                         'colors': ['#e6f2ff', '#e6f7ff', '#e6f5ff', '#e6f9ff', '#e6f0ff', '#e6f8ff', '#e6f3ff', '#e6f4ff', '#e6f6ff', '#e6faff']
                     },
-                    height=350  # Consistent height
+                    height=320  # Consistent height
                 )
                 st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
             
@@ -1435,7 +1485,7 @@ def occupation_section(state_name):
                         'x': bucket_filtered[count_col],  # Use the actual count column
                         'colors': ['#ffe6e6', '#ffe0e0', '#ffdada', '#ffd4d4', '#ffcece', '#ffc8c8', '#ffc2c2', '#ffbcbc', '#ffb6b6', '#ffb0b0']
                     },
-                    height=300  # Same height as left chart for alignment
+                    height=250  # Same height as left chart for alignment
                 )
                 st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
             
@@ -1526,8 +1576,8 @@ Focus on events within the next 3-6 months, on or after December 2025. Ensure th
         st.error(f"Error fetching events: {str(e)}")
         return []
          
-def create_vibrant_chart(chart_type, data, height=280, bar_width=0.6, align_end=False, long_text=False):
-    """Create vibrant, professional charts with varied types"""
+def create_vibrant_chart(chart_type, data, height=200, bar_width=0.6, align_end=False, long_text=False):
+    """Create vibrant, professional charts with varied types - DASHBOARD COMPACT MODE"""
     colors = {
         'pastel_multi': ['#a7c7e7', '#ffb3ba', '#baffc9', '#ffd9b3', '#d4b5ff', '#ffffba'],
         'pastel_blue': ['#93c5fd', '#60a5fa', '#3b82f6', '#2563eb'],
@@ -1546,10 +1596,10 @@ def create_vibrant_chart(chart_type, data, height=280, bar_width=0.6, align_end=
             hole=0.65,
             marker=dict(
                 colors=data.get('colors', colors['pastel_multi'][:len(data['labels'])]),
-                line=dict(color='#ffffff', width=3)
+                line=dict(color='#ffffff', width=2)
             ),
             textinfo='percent',
-            textfont=dict(size=12, family='Poppins', color='#4b5563', weight=600),
+            textfont=dict(size=10, family='Poppins', color='#4b5563', weight=600),
             hovertemplate='<b>%{label}</b><br>%{value:,}<br><b>%{percent}</b><extra></extra>'
         )])
         
@@ -1563,7 +1613,7 @@ def create_vibrant_chart(chart_type, data, height=280, bar_width=0.6, align_end=
                 line=dict(color='#ffffff', width=2)
             ),
             textinfo='label+percent',
-            textfont=dict(size=10, family='Poppins', color='#4b5563', weight=600),
+            textfont=dict(size=9, family='Poppins', color='#4b5563', weight=600),
             hovertemplate='<b>%{label}</b><br>%{value:,}<br><b>%{percent}</b><extra></extra>',
             textposition='outside'
         )])
@@ -1579,7 +1629,7 @@ def create_vibrant_chart(chart_type, data, height=280, bar_width=0.6, align_end=
             text=data.get('text', data['y']),
             texttemplate='<b>%{text:,.0f}</b>',
             textposition='outside',
-            textfont=dict(size=10, family='Poppins', color='#4b5563', weight=600),
+            textfont=dict(size=9, family='Poppins', color='#4b5563', weight=600),
             hovertemplate='<b>%{x}</b><br>%{y:,}<extra></extra>',
             width=bar_width
         )])
@@ -1596,7 +1646,7 @@ def create_vibrant_chart(chart_type, data, height=280, bar_width=0.6, align_end=
             text=data.get('text', data['x']),
             texttemplate='<b>%{text:,.0f}</b>',
             textposition='outside',
-            textfont=dict(size=10, family='Poppins', color='#4b5563', weight=600),
+            textfont=dict(size=9, family='Poppins', color='#4b5563', weight=600),
             hovertemplate='<b>%{y}</b><br>%{x:,}<extra></extra>',
             width=bar_width
         )])
@@ -1608,8 +1658,8 @@ def create_vibrant_chart(chart_type, data, height=280, bar_width=0.6, align_end=
             marker=dict(
                 color=data.get('colors', colors['education'][:len(data['y'])])
             ),
-            textinfo='value',
-            textfont=dict(size=11, family='Poppins', color='#4b5563', weight=600),
+            textinfo='value+percent initial',
+            textfont=dict(size=10, family='Poppins', color='#4b5563', weight=600),
             hovertemplate='<b>%{y}</b><br>%{x:,}<extra></extra>'
         )])
     
@@ -1619,7 +1669,7 @@ def create_vibrant_chart(chart_type, data, height=280, bar_width=0.6, align_end=
             y=data['y'],
             fill='tozeroy',
             mode='lines',
-            line=dict(color=data.get('color', '#93c5fd'), width=3),
+            line=dict(color=data.get('color', '#93c5fd'), width=2),
             fillcolor=data.get('fillcolor', 'rgba(147, 197, 253, 0.3)'),
             hovertemplate='<b>%{x}</b><br>%{y:,}<extra></extra>'
         )])
@@ -1659,8 +1709,8 @@ def create_vibrant_chart(chart_type, data, height=280, bar_width=0.6, align_end=
                     x=data['x'],
                     y=values,
                     mode='lines+markers',
-                    line=dict(color=data.get('colors', colors['pastel_multi'])[i], width=3),
-                    marker=dict(size=8),
+                    line=dict(color=data.get('colors', colors['pastel_multi'])[i], width=2),
+                    marker=dict(size=6),
                     hovertemplate='<b>%{x}</b><br>' + label + ': %{y:,}<extra></extra>'
                 ))
         else:
@@ -1668,8 +1718,8 @@ def create_vibrant_chart(chart_type, data, height=280, bar_width=0.6, align_end=
                 x=data['x'],
                 y=data['y'],
                 mode='lines+markers',
-                line=dict(color=data.get('color', '#93c5fd'), width=3),
-                marker=dict(size=8),
+                line=dict(color=data.get('color', '#93c5fd'), width=2),
+                marker=dict(size=6),
                 hovertemplate='<b>%{x}</b><br>%{y:,}<extra></extra>'
             ))
     
@@ -1680,21 +1730,21 @@ def create_vibrant_chart(chart_type, data, height=280, bar_width=0.6, align_end=
             values=data['values'],
             marker=dict(
                 colors=data.get('colors', colors['pastel_multi'][:len(data['labels'])]),
-                line=dict(color='#ffffff', width=2)
+                line=dict(color='#ffffff', width=1)
             ),
-            textfont=dict(size=11, family='Poppins', color='#4b5563', weight=600),
+            textfont=dict(size=9, family='Poppins', color='#4b5563', weight=600),
             hovertemplate='<b>%{label}</b><br>%{value:,}<extra></extra>',
             textinfo='label+value'
         )])
     
     # Adjust margins for long text in horizontal bar charts
     if chart_type == "hbar" and long_text:
-        margin_left = 250  # Increased left margin for long text
+        margin_left = 200
     else:
         margin_left = 0
     
     fig.update_layout(
-        margin=dict(l=margin_left, r=20, t=10, b=0),
+        margin=dict(l=margin_left, r=10, t=10, b=30), # TIGHTER MARGINS
         height=height,
         paper_bgcolor='rgba(0,0,0,0)',
         plot_bgcolor='rgba(0,0,0,0)',
@@ -1705,17 +1755,16 @@ def create_vibrant_chart(chart_type, data, height=280, bar_width=0.6, align_end=
             y=1.02,
             xanchor="right",
             x=1,
-            font=dict(size=10, family='Poppins')
+            font=dict(size=9, family='Poppins') # SMALLER FONT
         ) if chart_type in ["stacked_bar", "grouped_bar", "line"] else {},
-        font=dict(family='Poppins', size=11, color='#6b7280'),
+        font=dict(family='Poppins', size=9, color='#6b7280'), # SMALLER FONT
         hovermode='closest'
     )
     
     if chart_type in ["bar", "hbar", "stacked_bar", "grouped_bar", "line", "area"]:
-        fig.update_xaxes(showgrid=False, showline=False, zeroline=False, tickfont=dict(color='#6b7280'))
-        fig.update_yaxes(showgrid=True, gridcolor='#f1f5f9', showline=False, zeroline=False, tickfont=dict(color='#6b7280'))
+        fig.update_xaxes(showgrid=False, showline=False, zeroline=False, tickfont=dict(size=9, color='#6b7280'))
+        fig.update_yaxes(showgrid=True, gridcolor='#f1f5f9', showline=False, zeroline=False, tickfont=dict(size=9, color='#6b7280'))
         
-        # For horizontal bar charts, align to one end if requested and handle long text
         if chart_type == "hbar":
             if align_end:
                 fig.update_layout(
@@ -1726,13 +1775,12 @@ def create_vibrant_chart(chart_type, data, height=280, bar_width=0.6, align_end=
                 )
             
             if long_text:
-                # Enable text wrapping for long labels
                 fig.update_yaxes(
                     tickmode='array',
                     tickvals=list(range(len(data['y']))),
                     ticktext=data['y'],
                     automargin=True,
-                    tickfont=dict(size=9, family='Poppins', color='#4b5563')
+                    tickfont=dict(size=8, family='Poppins', color='#4b5563') # SMALLER FONT
                 )
     
     return fig
@@ -1940,7 +1988,7 @@ if search_button and pincode:
                                             line=dict(color='white', width=2)
                                         ),
                                         textposition='inside',
-                                        textinfo='value',
+                                        textinfo='value+percent initial',
                                         hovertemplate='<b>%{y}</b><br>Count: %{x:,.0f}<extra></extra>'
                                     ))
 
@@ -2058,12 +2106,13 @@ if search_button and pincode:
                         st.markdown('<div class="warning-box">⚠️ API unavailable</div>', unsafe_allow_html=True)
                     else:
                         with st.spinner("Finding leads..."):
-                            industries = mappls_nearby(lat, lng, keyword="industry")
-                            insurance = mappls_nearby(lat, lng, keyword="insurance")
-                            clubs = mappls_nearby(lat, lng, keyword="club")
-                            banks = mappls_nearby(lat, lng, keyword="bank")
-                            colleges = mappls_nearby(lat, lng, keyword="college")
-                            medical = mappls_nearby(lat, lng, keyword="hospital")
+                            # ... inside the search button logic ...
+                            industries = google_places_nearby(lat, lng, keyword="industry")
+                            insurance = google_places_nearby(lat, lng, keyword="insurance agency") # Using specific keywords improves Google results
+                            clubs = google_places_nearby(lat, lng, keyword="club")
+                            banks = google_places_nearby(lat, lng, keyword="bank")
+                            colleges = google_places_nearby(lat, lng, keyword="college")
+                            medical = google_places_nearby(lat, lng, keyword="hospital")
                         
                                                 
                         # Tabs
@@ -2076,8 +2125,8 @@ if search_button and pincode:
                             with tab:
                                 if data:
                                     df = pd.DataFrame(data).head(50)
-                                    df = df[['Name', 'Address', 'Distance']]
-                                    df.columns = ['Name', 'Address', 'Distance (km)']
+                                    df = df[['Name', 'Rating', 'Distance (km)', 'Address']]
+                                    df.columns = ['Name', 'Rating (and Reviews)', 'Dist (km)', 'Address']
                                     st.dataframe(df, use_container_width=True, hide_index=True, height=400)
                                     
                                     csv = df.to_csv(index=False).encode('utf-8')
@@ -2087,12 +2136,5 @@ if search_button and pincode:
 
 st.markdown("<br><br>", unsafe_allow_html=True)
 st.markdown('<div style="text-align: center; color: #9ca3af; padding: 1.5rem; font-size: 0.85rem; border-top: 1px solid #e5e7eb;">Bajaj Life LeadGen • Source: https://censusindia.gov.in/ </div>', unsafe_allow_html=True)
-
-
-
-
-
-
-
 
 
